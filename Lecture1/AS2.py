@@ -2,7 +2,7 @@ import pandas as pd
 import os
 
 # Read the CSV file using the path relative to this Python file
-df = pd.read_csv(os.path.dirname(os.path.abspath(__file__)) + "/csv/auto.csv")
+df = pd.read_csv(os.path.dirname(os.path.abspath(__file__)) + "/auto.csv")
 
 # Remove all rows where 'mpg' is lower than 16
 df = df[df["mpg"] >= 16]
