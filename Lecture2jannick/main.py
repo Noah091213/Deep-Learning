@@ -7,6 +7,12 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+print(f"PyTorch Version: {torch.__version__}")
+print(f"CUDA Available: {torch.cuda.is_available()}")
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Training on device: {device}")
+
 # Download the MNIST dataset
 transform = transforms.ToTensor()
 train_dataset = datasets.MNIST(root='./data', train=True,
@@ -22,9 +28,9 @@ class MyNetwork(nn.Module):
     #1a
     def __init__(self):
         super(MyNetwork, self).__init__()
-        self.fc1 = nn.Linear(in_features=784, out_features=20)
-        self.fc2 = nn.Linear(in_features=20, out_features=20)
-        self.fc3 = nn.Linear(in_features=20, out_features=10)
+        self.fc1 = nn.Linear(in_features=784, out_features=250)
+        self.fc2 = nn.Linear(in_features=250, out_features=250)
+        self.fc3 = nn.Linear(in_features=250, out_features=10)
         self.flatten = nn.Flatten()
         self.relu = nn.ReLU()
         self.softmax = nn.Softmax(dim=1)
@@ -39,10 +45,11 @@ class MyNetwork(nn.Module):
 
 #1c
 model = MyNetwork()
+model = model.to(device) # Use the GPU if available
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-num_epochs = 10
+num_epochs = 25
 loss_temp = []
 loss_sum = 0
 loss_values = []
@@ -54,6 +61,7 @@ for epoch in range(num_epochs):
     #1d
     model.train()
     for data, targets in train_loader:
+        data, targets = data.to(device), targets.to(device)
         optimizer.zero_grad()
         outputs = model(data)
         loss = criterion(outputs, targets)
@@ -73,6 +81,7 @@ for epoch in range(num_epochs):
     total = 0
     with torch.no_grad():
         for data, targets in test_loader:
+            data, targets = data.to(device), targets.to(device)
             outputs = model(data)
             val_loss_temp.append(criterion(outputs, targets).item())
             _, predicted = torch.max(outputs.detach(), dim=1)
@@ -93,7 +102,7 @@ print(f"Model saved with an accuracy of {accuracy}%")
 
 plt.plot(list(range(num_epochs)), loss_values, 'bo', label='Training loss')
 plt.plot(list(range(num_epochs)), val_loss_values, 'b', label='Validation loss')
-plt.title('Training and validation loss')
+plt.title('3 layers, 250 nodes, 25 epochs')
 plt.xlabel('Epochs')
 plt.ylabel('Loss')
 plt.legend()
