@@ -1,43 +1,42 @@
 import torch
 import torch.nn as nn
 
-input_dim = (224, 224) # This scales the image so it can be an input for the network
+input_dim = (32, 32) # This scales the image so it can be an input for the network
 channel_dim = 1 # Greyscale, xray doesnt give any color information anyway
 
 class group_1(nn.Module):
     def __init__(self):
         super(group_1, self).__init__()
-        # Define channels and kernel sizes for dynamic model construction thingy
-        # This makes it easier to tune and lower total parameters
-        conv_channels = [17, 13, 9, 5] # Every entry is one layer
-        kernel_sizes = [3, 3, 3, 3] # Specify the kernel size for every layer
+        # Define channels and kernel sizes for dynamic conv layer construction
+        # This makes it easier to tune hyper parameters and lower total parameters
+        conv_channels = [2, 7] # Every entry is one layer and the number specifies the amount of channels in that layer
+        kernel_sizes = [3, 3, 3] # Specify the kernel size for each layer
 
+        # This loop is for dynamically constructing the conv layers using the defined channels and kernels
+        # Each loop builds one "conv layer" which includes everything in the loop
         layers = []
         prev_channels = channel_dim
-        for out_channels, k in zip(conv_channels, kernel_sizes):
-            # Dynamically building the layers of the CNN, every layer has these 4 functions
-            layers.append(nn.Conv2d(prev_channels, out_channels, kernel_size=k))
+        for i, (out_channels, k) in enumerate(zip(conv_channels, kernel_sizes)):
+            if i == 0:
+                # First layer input only has 1 channel, so depthwise separable conv doesnt do much
+                layers.append(nn.Conv2d(prev_channels, out_channels, kernel_size=k, padding=1))
+            else:
+                # Depthwise separable conv followed by a pointwise conv (shoutout to MobileNets, check them out, very cool)
+                layers.append(nn.Conv2d(prev_channels, prev_channels, kernel_size=k, padding=1, groups=prev_channels))
+                layers.append(nn.Conv2d(prev_channels, out_channels, kernel_size=1))
             layers.append(nn.BatchNorm2d(out_channels))
-            layers.append(nn.ReLU())
-            layers.append(nn.MaxPool2d(kernel_size=3))
+            layers.append(nn.LeakyReLU())
+            layers.append(nn.MaxPool2d(kernel_size=2))
             prev_channels = out_channels
         self.conv_layers = nn.Sequential(*layers) # Package the convolution layers for use
 
-        # This just checks what the size of the flattened layer is with a dummy tensor
-        with torch.no_grad():
-            dummy = torch.zeros(1, channel_dim, *input_dim)
-            flat_size = self.conv_layers(dummy).numel()
-
-        self.flatten = nn.Flatten()
-        self.fc1 = nn.Linear(flat_size, 64)
-        self.dropout = nn.Dropout(0.2)
-        self.act = nn.ReLU()
-        self.fc2 = nn.Linear(64, 2) # 2 neurons for picking normal or pneumonia
+        self.global_pool = nn.AdaptiveAvgPool2d(1) # Avg pool instead of flattening to reduce params
+        self.classifier = nn.Linear(prev_channels, 2)
 
     def forward(self, x):
         x = self.conv_layers(x)
-        x = self.flatten(x)
-        x = self.fc1(x)
-        x = self.act(self.dropout(x))
-        x = self.fc2(x) # Cross Entropy Loss brings the softmax
+        x = self.global_pool(x)
+        x = x.view(x.size(0), -1) # Drop the leftover 1x1 spatial dims, keep (batch, channels) for fc1
+        x = self.classifier(x) # Cross Entropy Loss brings the softmax
         return x
+    
